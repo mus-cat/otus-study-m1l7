@@ -1,0 +1,9 @@
+Origin: nginx.org
+Label: apt repository
+Codename: buster
+Architectures: amd64
+Components: main
+Description: Test deb package of Ngnix
+SignWith: yes
+Pull: buster
+

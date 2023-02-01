@@ -1,0 +1,20 @@
+---
+- name: Deploy Repo  Client
+  hosts: all
+  become: yes
+  gather_facts: no
+  vars:
+    ansible_python_interpreter: /usr/bin/python3.7
+
+  tasks:
+    - name: Get repo key
+      get_url:
+        url: http://192.168.56.10/repo.pub.gpg.key
+        dest: /etc/apt/trusted.gpg.d/testRepo.gpg
+
+    - name: Add repo
+      apt_repository:
+        repo: deb http://192.168.56.10/ buster main
+
+
+
