@@ -2,7 +2,7 @@
 ## Задание выполнялось с использованием VirtualBox 6.1.40. ВМ собирались с помощью vagrant на базе box-образа generic/debian10 (debian 10.13)
 ## В результате:
 
-##Собираем DEB-пакет 
+## Собираем DEB-пакет 
 - Устанавливаем пакеты необходимые для сборки deb-пакетов
 ```
 sudo apt-get install build-essential autoconf automake autotools-dev dh-make debhelper devscripts fakeroot xutils lintian pbuilder
@@ -19,10 +19,10 @@ tar -xzf nginx-1.22.1.tar.gz
 - Создаем необходимую структуру для построения deb-пакета
 ```
 cd nginx-1.22.1/
-dh_make -e behlc@e1.ru -f ../nginx-1.22.1.tar.gz
+dh_make -e test@test.ml -f ../nginx-1.22.1.tar.gz
 ```
-В процессе бдует задан вопрос, гворим s - т.е. single binary. В результате будет в текущей папке будет создана папка **debian**, некоторые файлы из нее необходимо будет подправить.
-![]()
+В процессе бдует задан вопрос, выбираем s - т.е. single binary. В результате в текущей папке будет создана подпапка **debian**, некоторые файлы из нее необходимо будет подправить.
+!["Содержимое директории"](https://github.com/mus-cat/otus-study-m1l7/blob/main/01.BuildDirContent.png)
 
 - Проверяем настройки и наличие всего необходимого для построения пакета. Попутон получаем список зависимостей
 ```
@@ -37,10 +37,10 @@ Packages needed:
   libc6-i386
   zlib1g-dev:amd64
 ```
-![](рис. 02)
+!["Перечень зависимостей"](https://github.com/mus-cat/otus-study-m1l7/blob/main/02.getDepPack.png)
 
 - Внёс изменения в файл debian/control, отвечающий за сборку пакета
- ![](рис. 03) 
+ !["Сдержимое файла control"](https://github.com/mus-cat/otus-study-m1l7/blob/main/03.controlContent.png) 
  
 - Попробывал запустить сборку пакета (по идее пакет должен быть подписан)
 ```
@@ -48,29 +48,32 @@ dpkg-buildpackage -rfakeroot --sign-key=D948F4DA0635BACF
 ```
 К сожалению процесс сборки сломался... Пришлось схитрить, с сайта `nginx` скачал src-пакета для debian (версия 1.22.0), хотел взять за пример. Но распаковав его и изучив содержимое файлов в папке **debian**, пришёл к выводу, что за разумное время мне не осилить всаимосвязь сущеностей внутри этих файлов и просто скопировал все файлы в свою папку **debian** (**control**, **rules**, **CHANGES** и т.п.). Повторно запустил сборку.
 ```
-cp -n ~/nginx-1.22.0/debian/* ~/build/nginx-1.22.1/debian/
+cp -n ~/nginx-1.22.0/debian/* ~/test2/nginx-1.22.1/debian/
 dpkg-buildpackage -rfakeroot --sign-key=D948F4DA0635BACF
 ```
-![](рис. 04)
+!["Урааа!!! Пакет!!!"](https://github.com/mus-cat/otus-study-m1l7/blob/main/04.resultBuildPackage.png)
+### P.S. Пришлось внести изменения в фалы ****.service** включаемые в пакет, поменять пути расположения pid-файла для **nginx**.
 
-8. Экпортируем открытый и приватный ключи. Подписывать репозиторий будем теми же ключами, что и пакет.
-gpg --armor --output repo.gpg.pub.key --export behlc
-gpg -a --outpu repo.gpg.priv.key --export-secret-keys behlc
+### В результате получили пакет **nginx_1.22.1-1_amd64.deb**. Пакет будет использоватся в следующей части, будем размещать его в репозитории
 
-9. dpkg -i nginx
-vi /lib/systemd/system/nginx.service - исправил /var/run/nginx.pid -> /run/nginx.pid
-systemctl daemon-reload 
+## Создаем репозиторий
+### Кратко, что делаем для создания репозитория.
 
-gpg --batch --gen-key key.gen
-gpg --import foo.pub
+#### На сервере (имя ВМ - `webRepo`):
+1. Устаналвиваем необходимые инструменты для создания web-репозитория (**reprepro** и созданный выше пакет nginx, заодно проверяя его минимальную работоспособность)
+2. Создаем gpg-ключи (с помощью утилиты gpg с использованием опции `--batch` и файла ответов **key.gen**). Закрытым ключом будет подписан репозиторий, а открытый ключ будет доступен через веб (`http://192.168.56.10/repo.pub.gpg.key`).
+3. С помощью **repreporo** создаем репозиторий (в директории /var/www/repo)
+4. Правим default конфиг nginx, чтбы в `location /`, `root` указывал на `/var/www/repo`
 
-/etc/nginx/conf.d/default.conf
-location / {
-        root   /var/www/repo;
-        autoindex on;
-        #index  index.html index.htm;
-    }
+#### На клиенте (имя ВМ - `repoClient`):
+1. Копируем открытый ключ с сервера
+2. Размещаем его в **/etc/apt/trusted.d/**
+3. Добавляем наш репозиторий (строка `deb http://192.168.56.10/ buster main`) и обновляем список доступных пакетов
+4. При необходимости устанавливаем созданный нами пакет (`apt install nginx`)
 
+### Фалы:
+**Vagrantfile** - содержит описяния для создания двух ВМ, `webRepo` и `repoClient`. Для ВМ `webRepo` также настроен проборос порта 80 через порт 8080 хоста; \
+**nginx_1.22.1-1_amd64.deb** - deb-пакет размещаемый в нашем репозитории; \
+**deployWebRepo.yml** и **useRepo.yml** - осуществляют настройку ВМ, соответственно `webRepo` и `repoClient`; \
+**key.gen** - параметры для создания пары gpg-ключей; 
 
-gpg --digest-algo SHA256 --clearsign --output InRelease Release
-gpg --digest-algo SHA256 --armor --output Release.gpg --detach-sign Release
